@@ -144,6 +144,21 @@ func (c *environ) Open(path string, flags int, perm os.FileMode) (*os.File, erro
 	return f, nil
 }
 
+func (c *environ) MkWorkDir() error {
+	// Create the work directory with 0755 permissions
+	err := syscall.Mkdirat(int(c.wd.Fd()), ".", 0755)
+	if err != nil {
+		// Check if directory already exists
+		var stat unix.Stat_t
+		err1 := unix.Fstatat(int(c.wd.Fd()), ".", &stat, 0)
+		if err1 == nil && stat.Mode&syscall.S_IFMT == syscall.S_IFDIR {
+			return nil // Directory already exists, that's fine
+		}
+		return &os.PathError{Op: "mkdir", Path: c.workDir, Err: err}
+	}
+	return nil
+}
+
 // MkdirAll equivalent to os.MkdirAll but in container
 func (c *environ) MkdirAll(path string, perm os.FileMode) error {
 	if path == "" || path == "." {
@@ -212,6 +227,51 @@ func (c *environ) Symlink(oldName, newName string) error {
 	}
 	return unix.Symlinkat(oldName, int(c.wd.Fd()), newName)
 }
+
+// func (c *environ) HardLink(srcDir, dstDir string) error {
+// 	// Walk srcDir recursively
+// 	return filepath.WalkDir(srcDir, func(path string, d os.DirEntry, err error) error {
+// 		if err != nil {
+// 			return err
+// 		}
+// 		rel, err := filepath.Rel(srcDir, path)
+// 		if err != nil {
+// 			return err
+// 		}
+// 		if rel == "." {
+// 			// skip root
+// 			return nil
+// 		}
+// 		srcAbs := path                       // always absolute on host
+// 		dstRel := filepath.Join(dstDir, rel) // relative to container workdir
+
+// 		info, err := d.Info()
+// 		if err != nil {
+// 			return err
+// 		}
+
+// 		switch {
+// 		case d.IsDir():
+// 			// Create directory in dstDir
+// 			if err := c.MkdirAll(dstRel, info.Mode().Perm()); err != nil {
+// 				return err
+// 			}
+// 		case (info.Mode() & os.ModeSymlink) != 0:
+// 			// Skip symlinks
+// 			return nil
+// 		case info.Mode().IsRegular():
+// 			// Create hard link for regular file
+// 			err := unix.Linkat(unix.AT_FDCWD, srcAbs, int(c.wd.Fd()), dstRel, 0)
+// 			if err != nil {
+// 				return &os.LinkError{Op: "link", Old: srcAbs, New: dstRel, Err: err}
+// 			}
+// 		default:
+// 			// Skip other special files
+// 			return nil
+// 		}
+// 		return nil
+// 	})
+// }
 
 func (c *environ) setCgroupLimit(cg Cgroup, limit envexec.Limit) error {
 	cpuSet := limit.CPUSet

@@ -93,6 +93,7 @@ type FileErrorType int
 // FileError enums
 const (
 	ErrCopyInOpenFile FileErrorType = iota
+	ErrCopyInUnknownFile
 	ErrCopyInCreateDir
 	ErrCopyInCreateFile
 	ErrCopyInCopyContent

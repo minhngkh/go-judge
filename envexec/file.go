@@ -243,6 +243,8 @@ func FileToReader(f File) (io.ReadCloser, error) {
 		return io.NopCloser(f.Reader), nil
 
 	case *FileInput:
+		fmt.Println("copyin: ", f)
+
 		file, err := os.Open(f.Path)
 		if err != nil {
 			return nil, err
