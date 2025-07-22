@@ -4,7 +4,6 @@ import (
 	"fmt"
 	"io"
 	"os"
-	"path"
 	"path/filepath"
 	"sync"
 
@@ -49,46 +48,42 @@ func copyIn(m Environment, copyIn map[string]File) ([]FileError, error) {
 					return fmt.Errorf("copyin: stat file %q: %w", temp.Path, err)
 				}
 
+				// if info.IsDir() {
+				// 	// Copy contents of the directory, not the directory itself
+				// 	entries, err := os.ReadDir(temp.Path)
+				// 	if err != nil {
+				// 		t = ErrCopyInUnknownFile
+				// 		return fmt.Errorf("copyin: read dir %q: %w", temp.Path, err)
+				// 	}
+
+				// 	for _, entry := range entries {
+				// 		srcPath := filepath.Join(temp.Path, entry.Name())
+				// 		destName := entry.Name()
+
+				// 		if entry.IsDir() {
+				// 			// For directories, use CopyFS with proper destination
+				// 			destPath := filepath.Join(n, destName)
+				// 			err = os.CopyFS(destPath, os.DirFS(srcPath))
+				// 		}
+
+				// 		if err != nil {
+				// 			t = ErrCopyInUnknownFile
+				// 			return fmt.Errorf("copyin: copy %q to %q: %w", srcPath, destName, err)
+				// 		}
+				// 	}
+				// 	fmt.Printf("copyin: copy dir contents from %q to %q\n", temp.Path, m.WorkDir().Name())
+				// 	return nil
+				// }
+
+				// TODO: no idea why this doesn't work
 				if info.IsDir() {
-					// Copy contents of the directory, not the directory itself
-					entries, err := os.ReadDir(temp.Path)
+					// Use your syscall-based copyDir to copy the directory recursively
+					err = m.CopyDir(temp.Path, n)
 					if err != nil {
 						t = ErrCopyInUnknownFile
-						return fmt.Errorf("copyin: read dir %q: %w", temp.Path, err)
+						return fmt.Errorf("copyin: copy dir %q to %q: %w", temp.Path, n, err)
 					}
-
-					for _, entry := range entries {
-						srcPath := filepath.Join(temp.Path, entry.Name())
-						destName := path.Join(n, entry.Name())
-
-						if entry.IsDir() {
-							// For directories, use CopyFS with proper destination
-							destPath := filepath.Join(n, destName)
-							err = os.CopyFS(destPath, os.DirFS(srcPath))
-						} else {
-							// For files, copy using Environment methods
-							err = copyFileToEnv(m, srcPath, destName)
-						}
-
-						if err != nil {
-							t = ErrCopyInUnknownFile
-							return fmt.Errorf("copyin: copy %q to %q: %w", srcPath, destName, err)
-						}
-					}
-					fmt.Printf("copyin: copy dir contents from %q to %q\n", temp.Path, m.WorkDir().Name())
-					return nil
-					// ensure path exists
-
-					// if err := m.MkWorkDir(); err != nil {
-					// 	t = ErrCopyInCreateDir
-					// 	return fmt.Errorf("copyin: create dir %q: %w", filepath.Dir(m.WorkDir().Name()), err)
-					// }
-
-					// if err := m.HardLink(temp.Path, n); err != nil {
-					// 	t = ErrCopyInCopyContent
-					// 	return fmt.Errorf("copyin: link dir %q to %q: %w", temp.Path, n, err)
-					// }
-
+					fmt.Printf("copyin: copy dir from %q to %q\n", temp.Path, n)
 					return nil
 				}
 			}

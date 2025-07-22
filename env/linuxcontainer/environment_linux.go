@@ -300,3 +300,96 @@ func (c *environ) setCgroupLimit(cg Cgroup, limit envexec.Limit) error {
 func isCgroupSetHasError(err error) bool {
 	return err != nil && !errors.Is(err, cgroup.ErrNotInitialized) && !errors.Is(err, os.ErrNotExist)
 }
+
+func (c *environ) CopyDir(src, dst string) error {
+	srcDir, err := os.Open(src)
+	if err != nil {
+		return err
+	}
+	defer srcDir.Close()
+
+	return c.copyDir(srcDir, dst)
+}
+
+func (c *environ) copyDir(src *os.File, dst string) error {
+	// make sure dir exists
+	if err := c.MkdirAll(dst, 0777); err != nil {
+		return err
+	}
+	newDir, err := syscall.Openat(int(c.wd.Fd()), dst, syscall.O_CLOEXEC|syscall.O_RDONLY, 0777)
+	if err != nil {
+		return err
+	}
+	defer syscall.Close(newDir)
+
+	dir := src
+	names, err := dir.Readdirnames(-1)
+	if err != nil {
+		return err
+	}
+	for _, n := range names {
+		if err := copyFileDir(int(dir.Fd()), newDir, n); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func copyFileDir(srcDirFd, dstDirFd int, name string) error {
+	// open the source file or directory
+	fd, err := syscall.Openat(srcDirFd, name, syscall.O_CLOEXEC|syscall.O_RDONLY, 0777)
+	if err != nil {
+		return fmt.Errorf("copyfiledir: openat src %q: %w", name, err)
+	}
+	defer syscall.Close(fd)
+
+	var st syscall.Stat_t
+	if err := syscall.Fstat(fd, &st); err != nil {
+		return fmt.Errorf("copyfiledir: fstat %q: %w", name, err)
+	}
+
+	switch st.Mode & syscall.S_IFMT {
+	case syscall.S_IFREG:
+		// open the dst file
+		dstFd, err := syscall.Openat(dstDirFd, name, syscall.O_CLOEXEC|syscall.O_WRONLY|syscall.O_CREAT|syscall.O_TRUNC, 0777)
+		if err != nil {
+			return fmt.Errorf("copyfiledir: openat dst %q: %w", name, err)
+		}
+		defer syscall.Close(dstFd)
+
+		// send file
+		if _, err := syscall.Sendfile(dstFd, fd, nil, int(st.Size)); err != nil && err != syscall.EINVAL {
+			return fmt.Errorf("copyfiledir: sendfile %q: %w", name, err)
+		}
+		return nil
+	case syscall.S_IFDIR:
+		// create the directory in the destination
+		if err := syscall.Mkdirat(dstDirFd, name, 0777); err != nil && !os.IsExist(err) {
+			return fmt.Errorf("copyfiledir: mkdirat dst %q: %w", name, err)
+		}
+		// open the new directory in the destination
+		newDstFd, err := syscall.Openat(dstDirFd, name, syscall.O_CLOEXEC|syscall.O_RDONLY, 0777)
+		if err != nil {
+			return fmt.Errorf("copyfiledir: openat dst dir %q: %w", name, err)
+		}
+		defer syscall.Close(newDstFd)
+
+		// read entries in the source directory
+		srcDir := os.NewFile(uintptr(fd), name)
+		names, err := srcDir.Readdirnames(-1)
+		if err != nil {
+			return fmt.Errorf("copyfiledir: readdirnames %q: %w", name, err)
+		}
+		for _, n := range names {
+			if n == "." || n == ".." {
+				continue
+			}
+			if err := copyFileDir(int(fd), newDstFd, n); err != nil {
+				return err
+			}
+		}
+		return nil
+	default:
+		return fmt.Errorf("copyfiledir: %q is not a regular file or directory", name)
+	}
+}

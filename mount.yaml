@@ -40,6 +40,11 @@ mount:
     source: /var/lib/ghc
     target: /var/lib/ghc
     readonly: true
+  # Bind-mount resolv.conf for DNS
+  - type: bind
+    source: /etc/resolv.conf
+    target: /etc/resolv.conf
+    readonly: true
   # go wants /dev/null
   - type: bind
     source: /dev/null

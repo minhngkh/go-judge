@@ -65,7 +65,7 @@ type Environment interface {
 	// Make symbolic link for a file / directory
 	Symlink(oldName, newName string) error
 	MkWorkDir() error // MkWorkDir creates the work directory if it doesn't exist
-	// HardLink(srcDir, dstDir string) error // HardLink creates hard links for all files in srcDir to dstDir
+	CopyDir(src, dst string) error
 }
 
 // NewStoreFile creates a new file in storage
