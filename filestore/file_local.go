@@ -57,10 +57,11 @@ func (s *fileLocalStore) Remove(id string) bool {
 
 	delete(s.name, id)
 	p := filepath.Join(s.dir, id)
+	fmt.Println("Removing file:", p)
 	if _, err := os.Stat(p); os.IsNotExist(err) {
 		return false
 	}
-	os.Remove(p)
+	os.RemoveAll(p)
 	return true
 }
 
